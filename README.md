@@ -21,7 +21,7 @@ AI Trip Planner generates day-by-day itineraries from plain language input, veri
 
 ## System Architecture
 
-![System Architecture](docs/system-architecture.svg)
+![System Architecture](docs/system-architecture.png)
 
 The application uses a three-tier pipeline:
 
