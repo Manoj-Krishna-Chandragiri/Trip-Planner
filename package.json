@@ -1,0 +1,11 @@
+{
+  "name": "trip-planner",
+  "private": true,
+  "description": "Root package.json so Vercel installs the backend's dependencies where api/index.js can resolve them (Node's module resolution walks up from server/ to here). Not used for local dev -- see client/ and server/ for that.",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
