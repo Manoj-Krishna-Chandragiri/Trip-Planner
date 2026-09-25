@@ -1,164 +1,87 @@
-# Trip Planner
+# AI Trip Planner — Smart Itinerary Engine
 
-Describe a trip in plain text, get a day-by-day itinerary you can reorder,
-expand, and edit — with every stop checked against real map data instead
-of trusted on the model's word.
+[![React](https://img.shields.io/badge/React-18.3.1-61dafb?logo=react&logoColor=white)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-6.4.3-646cff?logo=vite&logoColor=white)](https://vite.dev)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-4.21-000000?logo=express&logoColor=white)](https://expressjs.com)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-Utility_UI-38bdf8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Google Gemini API](https://img.shields.io/badge/Google_Gemini_API-LLM_Orchestration-4285f4?logo=google&logoColor=white)](https://ai.google.dev)
+[![OpenStreetMap](https://img.shields.io/badge/OpenStreetMap-Geospatial_Grounding-7eba42?logo=openstreetmap&logoColor=white)](https://www.openstreetmap.org)
 
-## Setup
+AI Trip Planner generates day-by-day itineraries from plain language input, verifies places against real map data, and keeps the result editable in the browser without sacrificing geographic realism.
 
-**Backend:**
+## Features
+
+- Voice-to-text input for trip origin, destination, and additional notes using the native browser speech recognition API.
+- Multi-model Gemini fallback handling with a request-time timeout race so the app degrades gracefully under model outages or rate limits.
+- Geographic realism enforcement that blocks impossible walking/cycling routes across major distances and instructs the model to explain required transit connections.
+- Structured JSON generation via `responseSchema`, so the LLM returns itinerary objects and refinement diffs instead of unstructured prose.
+- Dynamic map enrichment through Nominatim geocoding, reverse geocoding, and route validation against live OpenStreetMap data.
+- Quick-fill preset templates for common trips, letting users seed the form in one click.
+
+## System Architecture
+
+![System Architecture](docs/system-architecture.svg)
+
+The application uses a three-tier pipeline:
+
+- Client: Vite + React with state management for resets, theme switching, compact header search, and speech API interaction.
+- Backend: Node.js + Express with multi-model fallback (`gemini-3.5-flash-lite`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`), timeout racing, and a custom User-Agent geocoding layer.
+- External services: Google Gemini API for itinerary generation plus OpenStreetMap/Nominatim, OSRM, and Overpass for map grounding and enrichment.
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 18 or newer
+- npm
+- A Google Gemini API key from https://aistudio.google.com/apikey
+
+### Backend Setup
+
 ```bash
 cd server
 npm install
-cp .env.example .env   # add your free Gemini key
-npm start                # http://localhost:3001
+copy .env.example .env
+npm start
 ```
 
-**Frontend (separate terminal):**
+Server runs on `http://localhost:3001` by default.
+
+### Frontend Setup
+
 ```bash
 cd client
 npm install
-npm start                 # http://localhost:5173, proxies /api to the backend
+npm start
 ```
 
-Gemini key (free): https://aistudio.google.com/apikey — no key needed for
-Nominatim, OSRM, or Overpass (all free, public, no signup).
+Client runs on `http://localhost:5173` and proxies `/api` requests to the backend.
 
-## Deployment (Vercel)
+### Sample `.env`
 
-Client and API deploy together as one Vercel project:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+PORT=3001
+```
 
-- **`api/index.js`** — the actual serverless entry point Vercel invokes.
-  It just re-exports `server/app.js` (the Express app, minus `app.listen`),
-  so production runs the exact same route/middleware/error-handling code
-  as local dev. `server/index.js` is local-dev-only — it imports that same
-  app and calls `.listen()`, and never runs on Vercel.
-- **`vercel.json`** — builds the client (`client/dist`) as the static
-  output, and rewrites every `/api/*` request to `api/index.js`. Express's
-  own routing (`app.use('/api/plan', ...)`) handles dispatch from there
-  using the original request path.
-- **Root `package.json`** — exists only so Vercel's install step puts
-  the backend's dependencies (`express`, `cors`, `@google/generative-ai`,
-  `dotenv`) somewhere `api/index.js` can resolve them via Node's normal
-  upward module resolution. Not used for local dev.
+## Project Layout
 
-To deploy: import this repo in the Vercel dashboard (it picks up
-`vercel.json` automatically), then add one environment variable —
-**`GEMINI_API_KEY`** — under Project Settings → Environment Variables,
-and deploy.
+- `server/` contains the Express API, Gemini orchestration, geocoding, routing, and itinerary enrichment services.
+- `client/` contains the React UI, itinerary state hook, form controls, map rendering, and app styling.
+- `api/index.js` is the Vercel serverless entry point that re-exports the Express app.
+- `vercel.json` wires the static client build and routes `/api/*` to the backend.
 
-**Known trade-off**: `server/services/geocode.js`'s Nominatim rate
-limiter is an in-memory serial queue, which only holds within a single
-serverless instance — under concurrent cold starts, two instances could
-each independently stay under 1 req/sec while the combined total briefly
-exceeds it. Not an issue at demo/interview traffic levels; would need a
-shared external rate limiter (e.g. Redis-backed) to hold at real scale.
+## AI Integration & Disclosure
 
-## Architecture
+This project was developed with AI assistance in two ways:
 
-- **`server/services/gemini.js`** — calls Gemini with a `responseSchema`,
-  constraining it to return structured JSON (itinerary or a refinement
-  diff), never prose. Malformed/unusable output is caught here and tagged
-  `isOutputError` so the route layer can tell "the model said something
-  broken" apart from "the API call itself failed."
-- **`server/services/geocode.js`** — Nominatim geocoding through a serial
-  rate-limit queue (1 req/sec, per OSM's usage policy). Confirms each stop
-  is a real place and gets its coordinates.
-- **`server/services/routing.js`** — OSRM travel time/distance between
-  consecutive stops. Never throws; returns `null` on failure so a slow
-  routing API can't take down the itinerary.
-- **`server/services/enrichItinerary.js`** — orchestrates the above:
-  validates Gemini's shape, geocodes every stop, computes travel times,
-  and flags a day `tight` if its stops + travel time exceed 14 hours
-  (audits the model's own pacing against real travel data, not just
-  whether the places exist).
-- **`server/services/overpass.js`** — fallback path. If the Gemini call
-  fails outright (timeout/down/rate-limited, not just bad output), this
-  builds a real itinerary from OpenStreetMap POIs near the geocoded
-  destination, with zero LLM involvement. The app degrades instead of
-  dying; the UI marks it clearly as a basic, non-personalized plan.
-- **`server/routes/refine.js`** — follow-up edits return a diff (`add` /
-  `replace` / `remove` ops) instead of a full regenerated itinerary, so
-  manual edits (removed stops, reordering) survive a refinement request.
-- **`client/src/hooks/useTripPlanner.js`** — the state machine. Uses an
-  `AbortController` *and* a request-ID counter together: if you submit
-  twice quickly, the older request is cancelled and, even if it still
-  resolves, its result is discarded rather than overwriting the newer one.
-- **`client/src/components/ItineraryView.jsx`** — drag-and-drop reordering
-  (`@hello-pangea/dnd`) with up/down buttons as a mobile-safe fallback,
-  per-day Leaflet map plotting only geocoded stops, expandable stop cards.
+- Google Gemini 3.5 Flash Lite was used in the application itself for structured JSON itinerary generation and refinement diffs through `responseSchema`.
+- GitHub Copilot and LLM-driven coding agents were used during development for iterative full-stack architecture decisions, CSS/UX refinement, validation handling, and cross-file implementation review.
 
-## Key decisions & trade-offs
+Human review remained part of the process: backend routes, state management, and the map-grounded validation flow were adjusted and verified in code, not treated as black-box output.
 
-- **Nutrition/coordinates/travel-time-style numbers are never asked of the
-  LLM.** Gemini proposes places and reasoning; Nominatim/OSRM/Overpass
-  supply anything that needs to be *true*, not just plausible.
-- **Two distinct failure paths, on purpose**: bad model output (422, no
-  fallback, user can retry) vs. the model being unreachable (Overpass
-  fallback, app stays usable). Conflating these would mean either
-  fallback-ing on garbage output (hiding a real bug) or erroring out when
-  the API is just slow (throwing away a recoverable case).
-- **Drag-and-drop *and* buttons** for reordering — touch drag can be
-  unreliable, so the up/down buttons guarantee the required feature works
-  on mobile regardless.
-- **No Zod/validation library** — the shape validator in
-  `enrichItinerary.js` is hand-rolled (~20 lines) so every check is
-  explainable without needing to explain a dependency's internals too.
+## Notes
 
-## AI usage note
-
-Built with AI assistance across three tools/sessions:
-
-- **Google Antigravity (Gemini 3.1 Pro)** scaffolded the backend — the
-  Gemini integration with schema-constrained JSON output, the
-  Nominatim/OSRM/Overpass grounding services, the diff-based refinement
-  route — and the core `useTripPlanner` state-management hook (the
-  request-ID + AbortController race-condition guarding, in particular).
-- **Claude** built out the frontend components, drag-and-drop itinerary
-  view, and ported the approved Figma design (color tokens, fonts,
-  animation timing) into plain CSS after Antigravity's usage limit was
-  hit mid-task.
-- **Claude Code** was used for iterative debugging and polish passes
-  after the fact: fixing a dark-mode contrast bug (a `<button>` wasn't
-  inheriting the theme's text color and rendered black-on-black),
-  restructuring the welcome screen to be full-bleed instead of trapped
-  in a narrow centered column, and tracking down a genuinely subtle bug
-  where the location-permission modal was rendering off-screen — its
-  `position: fixed` overlay was being re-anchored by a `transform` on an
-  ancestor element instead of the viewport, fixed by rendering it
-  through a React portal.
-
-All architecture decisions — schema design, the two-tier failure
-strategy (bad output vs. unreachable model), the fallback approach, what
-gets asked of the LLM vs. verified against real data — were directed and
-reviewed by me throughout, and I can explain and modify every file in
-this repo.
-
-## Known limitations
-
-- Nominatim/OSRM/Overpass are all free public instances with no uptime
-  guarantee and modest rate limits — fine for this project's scale, not
-  for production traffic.
-- The Overpass fallback doesn't compute travel times between its stops,
-  or an origin distance chip — only the primary Gemini path does.
-- Travel *distance* always comes from OSRM's real road network
-  regardless of transport mode. Travel *duration* is OSRM's real
-  driving-profile estimate when mode is Driving/unset, and a
-  speed-table estimate (5/15/50/25/80 km/h for
-  walking/cycling/driving/transit/train) for other modes — the public
-  OSRM instance only hosts a driving routing graph, so non-driving
-  durations are honestly labeled "(est.)" in the UI rather than
-  presented as measured.
-- The origin-to-first-stop distance is computed once, at itinerary
-  creation. If the user later reorders or removes Day 1's first stop,
-  the chip keeps referencing the original first stop rather than
-  recalculating — a known staleness edge case, not a crash risk.
-- No persistence — refresh the page and the itinerary is gone.
-- During a refinement request, the full itinerary view is replaced by the
-  generic loading state rather than staying visible with an inline
-  "updating…" indicator — functional, but a rougher UX than ideal; worth
-  revisiting if there's time before submission.
-
-## Time spent
-
-~10 hours total.
+- Public geocoding and routing services have rate limits and uptime variance, so the app is designed to fail soft rather than crash.
+- The itinerary remains editable after generation: users can reorder stops, remove stops, refine the plan, or start over from the hero/header controls.

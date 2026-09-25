@@ -32,7 +32,7 @@ const TYPE_LABELS = {
   shopping: 'Shopping',
 };
 
-export default function ItineraryView({ itinerary, isFallback, onRemoveStop, onReorderStops, onMoveStop, onApplyRefinement }) {
+export default function ItineraryView({ itinerary, isFallback, onRemoveStop, onReorderStops, onMoveStop, onApplyRefinement, onPlanAnotherTrip }) {
   // Which stop IDs are currently expanded to show description + reason.
   // A Set (not an array) so toggling is O(1) and duplicate-safe.
   const [expandedIds, setExpandedIds] = useState(() => new Set());
@@ -136,6 +136,12 @@ export default function ItineraryView({ itinerary, isFallback, onRemoveStop, onR
 
   return (
     <div className="itinerary">
+      <div className="itinerary__header">
+        <button type="button" className="back-button" onClick={onPlanAnotherTrip}>
+          <span aria-hidden="true">←</span> Plan Another Trip
+        </button>
+      </div>
+
       {isFallback && (
         <div className="fallback-banner" role="status">
           <strong>Basic itinerary.</strong>{' '}

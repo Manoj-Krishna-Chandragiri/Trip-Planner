@@ -101,6 +101,16 @@ export function useTripPlanner() {
     if (lastParamsRef.current) submit(lastParamsRef.current);
   }, [submit]);
 
+  const resetState = useCallback(() => {
+    abortControllerRef.current?.abort();
+    requestIdRef.current += 1;
+    lastParamsRef.current = null;
+    setStatus('idle');
+    setItinerary(null);
+    setError(null);
+    setLastDescription('');
+  }, []);
+
   // ── Local itinerary mutations (no re-fetch needed) ──────────────
   // These are pure functions — they return new objects, never mutate in place.
 
@@ -173,5 +183,6 @@ export function useTripPlanner() {
     moveStop,
     applyRefinement,
     lastDescription,
+    resetState,
   };
 }

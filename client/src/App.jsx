@@ -32,6 +32,7 @@ export default function App() {
     moveStop,
     applyRefinement,
     lastDescription,
+    resetState,
   } = useTripPlanner();
 
   const hasResult = status === 'success' || status === 'fallback';
@@ -88,6 +89,7 @@ export default function App() {
             onReorderStops={reorderStops}
             onMoveStop={moveStop}
             onApplyRefinement={applyRefinement}
+            onPlanAnotherTrip={resetState}
           />
         )}
       </main>
