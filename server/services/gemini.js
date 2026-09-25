@@ -122,20 +122,18 @@ const DIFF_SCHEMA = {
 };
 
 // ── Constants ──────────────────────────────────────────────────────
-// 25s was too tight for generateRefinement specifically -- it sends the
-// entire current itinerary back to Gemini as prompt context (see below),
-// a much bigger prompt than the initial plan generation, and took longer
-// than 25s from Vercel's network path to Google's API in practice even
-// though it was comfortably under that locally. Raised for both calls
-// rather than just refinement, for headroom on a slow Gemini day generally.
-// Paired with a matching `maxDuration` in vercel.json -- raising this
-// alone does nothing if the platform kills the function first.
 const TIMEOUT_MS = 55_000;
-// Using the -latest alias rather than a pinned version on purpose: Gemini
-// model IDs have been retired mid-project twice already tonight
-// (gemini-2.0-flash-lite, then gemini-2.5-flash itself 404'd on July 24).
-// An alias absorbs Google's future migrations instead of breaking again.
-const MODEL_NAME = 'gemini-flash-latest';
+
+// Ordered fallback array of active Gemini models.
+// If one encounters a 503 (high demand) or 404, the service will seamlessly attempt the next.
+const FALLBACK_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite'
+];
+
+// Helper delay to allow small pause between retries
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -147,7 +145,6 @@ function getClient() {
 }
 
 // Wraps a promise with a hard timeout. Throws if the deadline passes.
-// We use Promise.race because the Gemini SDK doesn't expose an AbortSignal.
 function withTimeout(promise, ms, label) {
   const deadline = new Promise((_, reject) =>
     setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
@@ -155,17 +152,43 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise, deadline]);
 }
 
+// Attempts generation across models in FALLBACK_MODELS sequentially
+async function callGeminiWithFallback(genAI, prompt, schema) {
+  let lastError = null;
+
+  for (const modelName of FALLBACK_MODELS) {
+    try {
+      console.log(`[Gemini API] Executing request with model: ${modelName}`);
+
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+        },
+      });
+
+      const result = await withTimeout(
+        model.generateContent(prompt),
+        TIMEOUT_MS,
+        `Gemini generateContent (${modelName})`
+      );
+
+      return result;
+    } catch (err) {
+      console.warn(`[Gemini API] Model '${modelName}' failed: ${err.message}. Switching to next fallback model...`);
+      lastError = err;
+      await delay(800);
+    }
+  }
+
+  throw lastError || new Error('All Gemini models failed to generate a response.');
+}
+
 // ── Public API ─────────────────────────────────────────────────────
 
 async function generateItinerary(description) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({
-    model: MODEL_NAME,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: ITINERARY_SCHEMA,
-    },
-  });
 
   const prompt = `You are an expert travel planner. Create a detailed, realistic day-by-day trip itinerary.
 
@@ -186,21 +209,11 @@ Instructions:
   dedicate an explicit day (or the first stop of a day) to the transition
   itself — e.g. a day titled "Travel to Delhi" with a stop describing the
   flight/train/journey — rather than silently jumping the itinerary's
-  location between days as if no travel time was needed.`;
+  location between days as if no travel time was needed.
+- GEOGRAPHIC REALISM: Verify if the requested transport mode is physically possible between origin and destination. If a mode is physically impossible (e.g. walking across seas), explicitly explain the necessary transit connection (e.g. flight/ferry) in the day description or stop reason.`;
 
-  const result = await withTimeout(
-    model.generateContent(prompt),
-    TIMEOUT_MS,
-    'Gemini generateContent'
-  );
+  const result = await callGeminiWithFallback(genAI, prompt, ITINERARY_SCHEMA);
 
-  // BUGFIX: this used to be a bare JSON.parse. If Gemini ever returns
-  // text that isn't valid JSON (safety-filtered response, truncated
-  // output, etc.), JSON.parse throws a plain SyntaxError with no
-  // isOutputError flag — routes/plan.js would then treat it as "Gemini
-  // unavailable" and trigger the Overpass fallback, even though the
-  // brief calls for a 422 (bad output, no fallback) in this case.
-  // Tagging it here makes the error reach plan.js already classified.
   let rawText;
   try {
     rawText = result.response.text();
@@ -221,13 +234,6 @@ Instructions:
 
 async function generateRefinement(currentItinerary, refinementRequest) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({
-    model: MODEL_NAME,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: DIFF_SCHEMA,
-    },
-  });
 
   const prompt = `You are editing an existing trip itinerary. Return ONLY the minimum set of operations needed to satisfy the user's request. Preserve all stops not explicitly changed.
 
@@ -243,13 +249,24 @@ Operation types:
 
 Return an empty ops array if no changes are needed.`;
 
-  const result = await withTimeout(
-    model.generateContent(prompt),
-    TIMEOUT_MS,
-    'Gemini generateRefinement'
-  );
+  const result = await callGeminiWithFallback(genAI, prompt, DIFF_SCHEMA);
 
-  return JSON.parse(result.response.text());
+  let rawText;
+  try {
+    rawText = result.response.text();
+  } catch (err) {
+    const wrapped = new Error(`Gemini response had no usable text: ${err.message}`);
+    wrapped.isOutputError = true;
+    throw wrapped;
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch (err) {
+    const wrapped = new Error(`Gemini returned invalid JSON: ${err.message}`);
+    wrapped.isOutputError = true;
+    throw wrapped;
+  }
 }
 
 module.exports = { generateItinerary, generateRefinement };
