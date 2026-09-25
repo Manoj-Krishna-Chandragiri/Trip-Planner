@@ -46,12 +46,6 @@ const SpeechRecognitionCtor = typeof window !== 'undefined'
   ? window.SpeechRecognition || window.webkitSpeechRecognition
   : null;
 
-// onSubmit now receives an object, not a bare string, so the backend can
-// use travelingFrom/originLat/originLon/transportMode as real structured
-// data (for the origin distance calculation) while description remains
-// the free-text field Gemini reads -- this still satisfies the
-// assignment's "free-form text input" requirement via the "anything
-// else" field below, it's just no longer the ONLY thing submitted.
 export default function EmptyState({ onSubmit }) {
   const [destination, setDestination] = useState('');
   const [transportMode, setTransportMode] = useState('');
@@ -195,9 +189,7 @@ export default function EmptyState({ onSubmit }) {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        // Capture the REAL coordinates -- unlike a mock, these get sent
-        // straight to the backend for the origin distance calculation,
-        // skipping a lossy text-label round trip through geocoding again.
+
         const { latitude, longitude } = position.coords;
         setOriginCoords({ lat: latitude, lon: longitude });
         const label = await reverseGeocode(latitude, longitude);

@@ -1,12 +1,5 @@
-// Pure utility functions for itinerary state mutations.
-//
-// INTERVIEW NOTE: Why pure functions that return new objects?
-// React state updates must be immutable — mutating the previous state
-// directly causes React to skip re-renders (same object reference).
-// Every function here returns a brand-new top-level object so React
-// always detects the change.
 
-// Remove a stop from a specific day by its ID.
+
 export function removeStopFromDay(itinerary, dayIndex, stopId) {
   const days = itinerary.days.map((day, i) => {
     if (i !== dayIndex) return day;
@@ -18,9 +11,6 @@ export function removeStopFromDay(itinerary, dayIndex, stopId) {
   return { ...itinerary, days };
 }
 
-// Reorder stops within a day using source/destination indices.
-// Used by both drag-and-drop (from @hello-pangea/dnd's onDragEnd)
-// and the up/down arrow buttons.
 export function reorderStopsInDay(itinerary, dayIndex, sourceIndex, destIndex) {
   if (sourceIndex === destIndex) return itinerary; // No-op — same position
 
@@ -35,14 +25,6 @@ export function reorderStopsInDay(itinerary, dayIndex, sourceIndex, destIndex) {
   return { ...itinerary, days };
 }
 
-// Move a stop from one day to another (or reorder within the same day).
-//
-// INTERVIEW NOTE: Why splice both days in the SAME .map() pass instead of
-// two separate calls (removeStopFromDay then an "insert" function)? Because
-// sourceDayIndex and destDayIndex are indices into the SAME days array --
-// removing from source first would shift indices if you then tried to
-// insert using the original array, and building two intermediate itinerary
-// objects is wasted work. One pass, one new array, no index drift.
 export function moveStopBetweenDays(itinerary, sourceDayIndex, destDayIndex, sourceIndex, destIndex) {
   if (sourceDayIndex === destDayIndex) {
     return reorderStopsInDay(itinerary, sourceDayIndex, sourceIndex, destIndex);
@@ -68,7 +50,6 @@ export function moveStopBetweenDays(itinerary, sourceDayIndex, destDayIndex, sou
   return { ...itinerary, days };
 }
 
-// Format seconds into human-readable duration: "12 min", "1h 25 min"
 export function formatDuration(seconds) {
   if (!seconds) return null;
   const totalMins = Math.round(seconds / 60);
@@ -78,7 +59,6 @@ export function formatDuration(seconds) {
   return m > 0 ? `${h}h ${m} min` : `${h}h`;
 }
 
-// Format meters: "450 m", "3.2 km"
 export function formatDistance(meters) {
   if (!meters) return null;
   if (meters < 1000) return `${meters} m`;

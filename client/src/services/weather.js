@@ -1,7 +1,5 @@
-// Open-Meteo requires no API key and has solid global coverage (including
-// India), so this can be called directly from the browser -- unlike the
-// Gemini calls, there's no secret to protect here. Weather is never asked
-// of the LLM; it would have no real basis for a forecast, only a guess.
+
+
 const BASE_URL = 'https://api.open-meteo.com/v1/forecast';
 
 export async function fetchDailyForecast(lat, lon, numDays) {
@@ -26,7 +24,6 @@ export async function fetchDailyForecast(lat, lon, numDays) {
   }
 }
 
-// Minimal WMO weather-code -> icon/label mapping (per Open-Meteo's docs).
 export function describeWeatherCode(code) {
   if (code === 0) return { icon: '☀️', label: 'Clear' };
   if (code <= 3) return { icon: '⛅', label: 'Partly cloudy' };

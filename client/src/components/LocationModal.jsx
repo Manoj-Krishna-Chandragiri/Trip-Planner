@@ -1,13 +1,6 @@
 import { createPortal } from 'react-dom';
 import { MapPin, X } from 'lucide-react';
 
-// Rendered via a portal straight into document.body -- the empty-state
-// form (this modal's normal parent) lives inside .intro-slider, which
-// gets `transform: translateX(-50%)` once the welcome screen has been
-// advanced past. A transform on any ancestor turns this modal's
-// `position: fixed` overlay into one positioned relative to that
-// ancestor instead of the viewport, which is what was cutting it off
-// on the left edge -- a portal escapes that ancestor entirely.
 export default function LocationModal({ onAllow, onDismiss }) {
   return createPortal(
     <div className="modal-overlay" onClick={onDismiss}>

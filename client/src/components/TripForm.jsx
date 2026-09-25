@@ -1,8 +1,5 @@
 import { useState } from 'react';
 
-// compact=false: full textarea (empty state hero).
-// compact=true: single-line input (header, once a result exists) — reuses
-// the same submit/validation logic so both modes stay in sync.
 export default function TripForm({ onSubmit, isLoading, compact = false, initialValue = '' }) {
   const [value, setValue] = useState(initialValue);
 

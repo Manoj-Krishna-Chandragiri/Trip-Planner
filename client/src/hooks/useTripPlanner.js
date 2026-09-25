@@ -1,19 +1,4 @@
-// Core state machine hook for the trip planner.
-//
-// INTERVIEW NOTE — Race condition guard (two layers):
-//
-// Layer 1 — AbortController:
-//   Cancels the HTTP request itself when a new submit fires.
-//   This is best-effort: the browser may have already sent the request.
-//
-// Layer 2 — requestId:
-//   A monotonically-increasing counter. Each submit captures its own ID.
-//   When the response arrives, if the counter has moved on (a newer submit
-//   happened while we were waiting), the stale response is silently discarded.
-//   This handles cases where abort wasn't fast enough.
-//
-// Both layers together guarantee: only the LATEST submitted request's
-// response ever updates state.
+
 
 import { useState, useCallback, useRef } from 'react';
 import { removeStopFromDay, reorderStopsInDay, moveStopBetweenDays } from '../utils/itineraryHelpers';
@@ -24,28 +9,20 @@ export function useTripPlanner() {
   const [error, setError] = useState(null);
   const [lastDescription, setLastDescription] = useState('');
 
-  // requestIdRef: incremented on every submit. Used for stale response detection.
   const requestIdRef = useRef(0);
-  // abortControllerRef: holds the AbortController for the current in-flight request.
+
   const abortControllerRef = useRef(null);
-  // Full params of the last submission (not just the description) so
-  // retry() can replay travelingFrom/origin/transportMode too, not just
-  // re-send the text.
+
   const lastParamsRef = useRef(null);
 
   const submit = useCallback(async (input) => {
-    // The compact header search bar calls submit(description) with a
-    // plain string; the trip-basics form calls submit({ description,
-    // travelingFrom, originLat, originLon, transportMode }). Normalize
-    // both into one shape here so everything downstream only deals with
-    // one case.
+
     const params = typeof input === 'string' ? { description: input } : (input || {});
     const description = params.description;
     if (!description?.trim()) return;
 
     lastParamsRef.current = params;
 
-    // Cancel any in-flight request before starting a new one
     abortControllerRef.current?.abort();
 
     const currentId = ++requestIdRef.current;  // Capture this request's ID
@@ -70,7 +47,6 @@ export function useTripPlanner() {
         signal: controller.signal,
       });
 
-      // Stale check #1: did a newer request fire while fetch() was in progress?
       if (currentId !== requestIdRef.current) return;
 
       if (!response.ok) {
@@ -80,7 +56,6 @@ export function useTripPlanner() {
 
       const data = await response.json();
 
-      // Stale check #2: JSON parsing of a large itinerary can take a moment
       if (currentId !== requestIdRef.current) return;
 
       setItinerary(data.itinerary);
@@ -95,8 +70,6 @@ export function useTripPlanner() {
     }
   }, []);
 
-  // Retry re-submits the exact last params (description + origin + mode),
-  // not just the text, so a retry after an origin-aware request stays origin-aware.
   const retry = useCallback(() => {
     if (lastParamsRef.current) submit(lastParamsRef.current);
   }, [submit]);
@@ -111,9 +84,6 @@ export function useTripPlanner() {
     setLastDescription('');
   }, []);
 
-  // ── Local itinerary mutations (no re-fetch needed) ──────────────
-  // These are pure functions — they return new objects, never mutate in place.
-
   const removeStop = useCallback((dayIndex, stopId) => {
     setItinerary(prev => prev ? removeStopFromDay(prev, dayIndex, stopId) : prev);
   }, []);
@@ -126,7 +96,6 @@ export function useTripPlanner() {
     setItinerary(prev => prev ? moveStopBetweenDays(prev, sourceDayIndex, destDayIndex, sourceIndex, destIndex) : prev);
   }, []);
 
-  // ── Diff-based refinement ───────────────────────────────────────
   const applyRefinement = useCallback(async (refinementRequest) => {
     if (!itinerary || !refinementRequest?.trim()) return;
 

@@ -1,6 +1,5 @@
-// Decorative topographic contour lines, purely visual (aria-hidden). Lines
-// are generated from a formula rather than hand-drawn paths so the same
-// component works at any container size via the SVG viewBox.
+
+
 function topoPath(yBase, i) {
   const flip = i % 2 === 0;
   const a1 = 18 + (i % 5) * 7;

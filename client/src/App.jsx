@@ -11,13 +11,8 @@ import LoadingState from './components/LoadingState';
 import ErrorState from './components/ErrorState';
 import ItineraryView from './components/ItineraryView';
 
-// App renders the correct UI state based on the state machine in useTripPlanner.
-// States: idle → loading → success | error | fallback
 export default function App() {
-  // Separate from the data state machine below on purpose -- this is pure
-  // "have we shown the intro yet" UI state, local to this component, and
-  // resets to false permanently once the user clicks past it (we don't
-  // want the welcome screen reappearing every time they plan a new trip).
+
   const [showWelcome, setShowWelcome] = useState(true);
   const { theme, toggleTheme } = useTheme();
 
@@ -46,7 +41,7 @@ export default function App() {
             <Compass size={17} className="logo-icon" strokeWidth={1.5} />
             <span className="logo-text">Trip Planner</span>
           </div>
-          {/* Show compact search bar in header once a result exists */}
+          {}
           {hasResult && (
             <TripForm
               onSubmit={submit}

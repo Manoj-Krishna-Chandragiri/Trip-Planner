@@ -1,8 +1,5 @@
 const app = require('./app');
 
-// Local-dev entry point only. On Vercel, api/index.js imports app.js
-// directly and the platform handles listening -- this file (and its
-// app.listen call) never runs there.
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {

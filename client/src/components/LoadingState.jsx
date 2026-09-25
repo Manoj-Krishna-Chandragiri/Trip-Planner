@@ -7,13 +7,6 @@ const STEPS = [
   'Organising your day-by-day itinerary…',
 ];
 
-// Unlike the Figma reference (which had no real backend and just
-// animated on a fixed 3.4s timer), the real backend call takes a
-// genuinely variable amount of time -- Gemini + N geocode lookups +
-// N-1 routing legs. So this advances through steps on a timer but
-// STOPS at the second-to-last step and holds there, rather than
-// blindly assuming a fixed total duration. It never claims "done"
-// until the parent actually unmounts this component (real completion).
 const STEP_MS = 900;
 
 export default function LoadingState() {

@@ -1,13 +1,4 @@
-// POST /api/refine
-//
-// Accepts the current (possibly user-edited) itinerary and a refinement
-// request in plain text. Returns a diff (list of ops) instead of a full
-// new itinerary — this preserves any manual edits the user made
-// (removed stops, reordered stops) that aren't touched by the refinement.
-//
-// The diff is applied server-side before returning, so the client gets
-// the final merged itinerary (not just the ops it has to apply itself).
-// New stops added by the diff are geocoded before returning.
+
 
 const express = require('express');
 const { generateRefinement } = require('../services/gemini');
@@ -16,9 +7,8 @@ const { getTravelTime } = require('../services/routing');
 
 const router = express.Router();
 
-// Apply diff ops to an itinerary. Pure function — returns a new object.
 function applyOps(itinerary, ops) {
-  // Deep clone via JSON round-trip — simple and safe for plain data objects
+
   const result = JSON.parse(JSON.stringify(itinerary));
 
   for (const op of ops) {
@@ -41,7 +31,7 @@ function applyOps(itinerary, ops) {
       const newStop = { ...op.newStop, verified: false, travelToNext: null };
       if (op.afterStopId) {
         const idx = day.stops.findIndex(s => s.id === op.afterStopId);
-        // Insert after afterStopId (or at end if not found)
+
         day.stops.splice(idx !== -1 ? idx + 1 : day.stops.length, 0, newStop);
       } else {
         day.stops.push(newStop);
@@ -69,7 +59,6 @@ router.post('/', async (req, res) => {
     console.log(`[refine] Got ${ops.length} ops — applying...`);
     let updated = applyOps(currentItinerary, ops);
 
-    // Geocode any new unverified stops introduced by the diff
     for (const day of updated.days) {
       for (const stop of day.stops) {
         if (!stop.verified && stop.lat == null) {

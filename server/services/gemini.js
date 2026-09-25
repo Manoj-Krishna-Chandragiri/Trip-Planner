@@ -1,18 +1,5 @@
-// Gemini API service — generates structured itinerary JSON using responseSchema.
-//
-// INTERVIEW NOTE: Why responseSchema instead of prompting "return JSON"?
-// Because responseSchema forces the model to emit valid JSON matching our
-// schema — we don't need to parse/extract JSON from prose, and we know
-// exactly which fields will exist. The SDK uses SchemaType enums rather
-// than raw strings so the schema is type-safe.
-
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 
-// ── Schemas ────────────────────────────────────────────────────────
-
-// Mirrors the brief's required JSON shape exactly.
-// All fields are required so the validator and enrichment pipeline
-// can assume they exist without defensive optional chaining everywhere.
 const ITINERARY_SCHEMA = {
   type: SchemaType.OBJECT,
   required: ['tripTitle', 'region', 'days'],
@@ -79,8 +66,6 @@ const ITINERARY_SCHEMA = {
   },
 };
 
-// Schema for diff-based refinement — returns only the ops needed,
-// not the entire itinerary, so user's manual edits are preserved.
 const DIFF_SCHEMA = {
   type: SchemaType.OBJECT,
   required: ['ops'],
@@ -121,21 +106,15 @@ const DIFF_SCHEMA = {
   },
 };
 
-// ── Constants ──────────────────────────────────────────────────────
 const TIMEOUT_MS = 55_000;
 
-// Ordered fallback array of active Gemini models.
-// If one encounters a 503 (high demand) or 404, the service will seamlessly attempt the next.
 const FALLBACK_MODELS = [
   'gemini-3.5-flash-lite',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite'
 ];
 
-// Helper delay to allow small pause between retries
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// ── Helpers ────────────────────────────────────────────────────────
 
 function getClient() {
   if (!process.env.GEMINI_API_KEY) {
@@ -144,7 +123,6 @@ function getClient() {
   return new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 }
 
-// Wraps a promise with a hard timeout. Throws if the deadline passes.
 function withTimeout(promise, ms, label) {
   const deadline = new Promise((_, reject) =>
     setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
@@ -152,7 +130,6 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise, deadline]);
 }
 
-// Attempts generation across models in FALLBACK_MODELS sequentially
 async function callGeminiWithFallback(genAI, prompt, schema) {
   let lastError = null;
 
@@ -184,8 +161,6 @@ async function callGeminiWithFallback(genAI, prompt, schema) {
 
   throw lastError || new Error('All Gemini models failed to generate a response.');
 }
-
-// ── Public API ─────────────────────────────────────────────────────
 
 async function generateItinerary(description) {
   const genAI = getClient();

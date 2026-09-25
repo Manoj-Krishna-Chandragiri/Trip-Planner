@@ -1,24 +1,10 @@
-// Overpass API fallback — builds a real-data itinerary when Gemini is unavailable.
-//
-// Flow:
-//   1. Geocode the trip location from the user's description via Nominatim
-//   2. Fetch tourist POIs within 5km via Overpass QL
-//   3. Distribute into N days (up to 5 stops/day)
-//   4. Return a structured itinerary marked isFallback: true
-//
-// The returned itinerary has the same shape as a Gemini-generated one,
-// so the frontend renders it identically (with a warning banner on top).
-//
-// INTERVIEW NOTE: Overpass uses "around:RADIUS, LAT, LON" order —
-// note that's LAT,LON for Overpass (unlike OSRM which uses LON,LAT).
+
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const { geocodePlace } = require('./geocode');
 
-// ── Overpass QL query builder ──────────────────────────────────────
 function buildQuery(lat, lon, radiusMeters = 5000) {
-  // We query multiple tag types to get a diverse set of POIs.
-  // "out center" returns the centroid for ways/relations (not just nodes).
+
   return `[out:json][timeout:30];
 (
   nwr[tourism=attraction](around:${radiusMeters},${lat},${lon});
@@ -33,7 +19,6 @@ function buildQuery(lat, lon, radiusMeters = 5000) {
 out center 50;`;
 }
 
-// ── OSM tag → human-readable description ──────────────────────────
 function tagsToDescription(tags) {
   if (tags.description) return tags.description;
   if (tags.tourism === 'museum') return `A museum worth exploring in the area.`;
@@ -47,7 +32,6 @@ function tagsToDescription(tags) {
   return 'A point of interest sourced from OpenStreetMap.';
 }
 
-// ── Estimate visit duration from OSM tags ─────────────────────────
 function estimateDuration(tags) {
   if (tags.tourism === 'museum') return 90;
   if (tags.tourism === 'gallery') return 60;
@@ -57,10 +41,8 @@ function estimateDuration(tags) {
   return 45;
 }
 
-// ── Main fallback builder ──────────────────────────────────────────
 async function buildFallbackItinerary(description, requestedDays = 3) {
-  // Step 1: Geocode the destination from the full description string.
-  // Nominatim is good at extracting a place from natural language.
+
   const location = await geocodePlace(description);
   if (!location) {
     throw new Error('Could not determine a trip location from the description for fallback');
@@ -69,7 +51,6 @@ async function buildFallbackItinerary(description, requestedDays = 3) {
   const { lat, lon, displayName } = location;
   const cityName = displayName.split(',')[0];
 
-  // Step 2: Fetch POIs from Overpass
   const query = buildQuery(lat, lon);
   const resp = await fetch(OVERPASS_URL, {
     method: 'POST',
@@ -85,7 +66,6 @@ async function buildFallbackItinerary(description, requestedDays = 3) {
   const data = await resp.json();
   const elements = data.elements || [];
 
-  // Step 3: Filter to named elements with coordinates
   const pois = elements
     .filter(el => {
       const hasName = Boolean(el.tags?.name);
@@ -98,7 +78,7 @@ async function buildFallbackItinerary(description, requestedDays = 3) {
       lon: el.lon ?? el.center.lon,
       tags: el.tags,
     }))
-    // Remove duplicate names
+
     .filter((poi, idx, arr) => arr.findIndex(p => p.name === poi.name) === idx)
     .slice(0, requestedDays * 5);
 
@@ -106,7 +86,6 @@ async function buildFallbackItinerary(description, requestedDays = 3) {
     throw new Error(`No named POIs found near "${cityName}" via Overpass`);
   }
 
-  // Step 4: Distribute into days (up to 5 stops/day)
   const stopsPerDay = Math.max(2, Math.ceil(pois.length / requestedDays));
   const dayThemes = ['Discovering the Area', 'Culture & Highlights', 'Hidden Gems & Local Life'];
   const days = [];
@@ -124,7 +103,7 @@ async function buildFallbackItinerary(description, requestedDays = 3) {
         description: tagsToDescription(poi.tags),
         suggestedDurationMinutes: estimateDuration(poi.tags),
         reason: 'Sourced from OpenStreetMap data (AI unavailable)',
-        // Pre-fill coordinates — these stops are already geocoded from OSM
+
         lat: poi.lat,
         lon: poi.lon,
         verified: true,

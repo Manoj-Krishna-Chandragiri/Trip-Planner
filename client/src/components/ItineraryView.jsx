@@ -8,9 +8,6 @@ import {
 import { formatDuration, formatDistance } from '../utils/itineraryHelpers';
 import { fetchDailyForecast, describeWeatherCode } from '../services/weather';
 
-// Plain redirect links -- no API, no key, no cost. The user sees Google's
-// own real reviews/photos/ratings on Google's own site; nothing is
-// fetched, displayed, or fabricated inside this app.
 function googleMapsUrl(query) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
@@ -18,12 +15,6 @@ function googleHotelsNearUrl(query) {
   return `https://www.google.com/maps/search/hotels+near+${encodeURIComponent(query)}`;
 }
 
-// Category label for the color-coded type badge. The `type` value itself
-// comes straight from Gemini's structured output (server/services/gemini.js
-// already asks for one of these five and describes it as being "used for a
-// color-coded category badge in the UI") -- this just supplies the display
-// label and CSS hook; the color values live in App.css as --type-* vars so
-// they can vary by light/dark theme without any JS theme lookup here.
 const TYPE_LABELS = {
   landmark: 'Landmark',
   food: 'Food & Drink',
@@ -33,21 +24,13 @@ const TYPE_LABELS = {
 };
 
 export default function ItineraryView({ itinerary, isFallback, onRemoveStop, onReorderStops, onMoveStop, onApplyRefinement, onPlanAnotherTrip }) {
-  // Which stop IDs are currently expanded to show description + reason.
-  // A Set (not an array) so toggling is O(1) and duplicate-safe.
+
   const [expandedIds, setExpandedIds] = useState(() => new Set());
-  // Which stop IDs the user has checked off as visited. Same pattern as
-  // expandedIds: local UI state only, not sent to the backend, and not
-  // persisted across a reload -- this is a personal checklist, not itinerary
-  // data, so it doesn't belong in the itinerary object itself.
+
   const [visitedIds, setVisitedIds] = useState(() => new Set());
   const [refineText, setRefineText] = useState('');
   const [forecast, setForecast] = useState(null); // array indexed by day, or null if unavailable
 
-  // Weather is fetched once per itinerary, keyed off the first stop we
-  // actually have coordinates for (an unverified stop has none). This is
-  // best-effort context, not a hard requirement -- if it fails, forecast
-  // stays null and the day headers just don't show a weather chip.
   useEffect(() => {
     const anchor = itinerary.days.flatMap((d) => d.stops).find((s) => s.lat != null && s.lon != null);
     if (!anchor) return;
@@ -62,9 +45,6 @@ export default function ItineraryView({ itinerary, isFallback, onRemoveStop, onR
     });
   }
 
-  // Separate from expand/collapse on purpose: checking the box shouldn't
-  // also open the stop's details. stopPropagation keeps the click from
-  // bubbling up to the card's expand toggle.
   function toggleVisited(id, e) {
     e.stopPropagation();
     setVisitedIds((prev) => {
@@ -74,13 +54,6 @@ export default function ItineraryView({ itinerary, isFallback, onRemoveStop, onR
     });
   }
 
-  // INTERVIEW NOTE: One shared DragDropContext, not one per day.
-  // @hello-pangea/dnd only lets you drag between Droppables that share a
-  // DragDropContext ancestor -- with a separate context per day (the old
-  // structure), a drag could never leave the day it started in, because
-  // each day's Droppable was isolated inside its own context. Each day
-  // still gets its own <Droppable droppableId={`day-${i}`}>, so within-day
-  // reordering works exactly as before; only the wrapping context moved.
   function handleDragEnd(result) {
     if (!result.destination) return; // Dropped outside any droppable
 
@@ -97,14 +70,6 @@ export default function ItineraryView({ itinerary, isFallback, onRemoveStop, onR
     }
   }
 
-  // Up/down buttons as a mobile-friendly alternative to drag -- touch
-  // drag-and-drop can be unreliable, this guarantees reordering always
-  // works regardless of device. Extended to cross day boundaries: pressing
-  // "up" on a day's first stop sends it to the END of the previous day;
-  // pressing "down" on a day's last stop sends it to the START of the next
-  // day. Buttons are only disabled when there's truly nowhere to go (up on
-  // the very first stop of Day 1, down on the very last stop of the last
-  // day) -- see the disabled= checks where these are called below.
   function handleMoveUp(dayIndex, stopIndex) {
     if (stopIndex > 0) {
       onReorderStops(dayIndex, stopIndex, stopIndex - 1);
@@ -158,8 +123,7 @@ export default function ItineraryView({ itinerary, isFallback, onRemoveStop, onR
 
       <DragDropContext onDragEnd={handleDragEnd}>
         {itinerary.days.map((day, dayIndex) => {
-          // Only stops we could actually geocode get plotted — an
-          // unverified stop has no reliable coordinates to show.
+
           const verifiedStops = day.stops.filter((s) => s.verified && s.lat != null);
           const dayForecast = forecast?.[dayIndex];
           const weatherInfo = dayForecast ? describeWeatherCode(dayForecast.weatherCode) : null;
